@@ -40,8 +40,10 @@ def main():
                 newLine = line.split(" ")
                 if len(newLine) > 1:
                     if newLine[1] == "376":
+                        # `-> <server> 376 <nick> :End of /MOTD command.
                         sendRaw("JOIN {}{}".format(BOT_CHAN, NEW_LINES))
                 if newLine[0] == "PING":
+                    # `-> PING [:]<arg>
                     sendRaw("PONG {}{}".format(newLine[1], NEW_LINES))
 
 if __name__ == "__main__":
