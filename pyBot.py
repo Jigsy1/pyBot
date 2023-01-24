@@ -1,6 +1,5 @@
 # pyBot.py
-#
-# TODO: Try and split everything (replies, etc.) into separate files.
+
 
 # include(s):
 
@@ -37,6 +36,7 @@ def parse_irc_privmsg(data):
 
     line = data.split(" ")
     command = line[3][1:].lower()
+    # command = command.strip(NEW_LINES)
     if line[2] != BOT_NICK:
         if command[0] != BOT_TRIGGER:
             return
@@ -50,9 +50,9 @@ def parse_irc_privmsg(data):
 
 # Function(s):
 
-def sendRaw(input):
-    pyBot.send(input.encode("UTF-8"))
-    print(input.strip(NEW_LINES))
+def sendRaw(data):
+    pyBot.send(data.encode("UTF-8"))
+    print(data.strip(NEW_LINES))
 
 
 # define(s):
