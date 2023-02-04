@@ -3,6 +3,7 @@
 
 # include(s):
 
+import re
 import socket
 
 
@@ -11,9 +12,47 @@ import socket
 def parse_bot_command(command, data):
     BOT_COMMANDS[command](data)
 
-def parse_bot_debug(data):
-    nick = data[0].split("!")[0][1:]
-    sendRaw("{} {} :Hi {}, this is a debug line.{}".format(BOT_REPLYMETHOD, nick, nick, NEW_LINES))
+def parse_bot_do(data):
+    # DO [#chan] <text>
+
+    nick = getNick(data[0])
+    if is_array(data, 4) == False:
+        sendString(nick, ERR_NEEDMOREARGS)
+        return
+    if is_channel(data[4]) == False:
+        if is_channel(data[2]) == False:
+            sendString(nick, ERR_NEEDATARGET)
+            return
+        thisChannel = data[2]
+        thisString = " ".join(data[4:])
+    if is_array(data, 5) == False and "thisChannel" not in locals():
+        sendString(nick, ERR_NEEDMOREARGS)
+        return
+    if "thisChannel" not in locals():
+        thisChannel = data[4]
+        thisString = " ".join(data[5:])
+    sendRaw("PRIVMSG {} :\001ACTION {}\001{}".format(thisChannel, thisString, NEWLINE))
+
+def parse_bot_say(data):
+    # SAY [#chan] <text>
+
+    nick = getNick(data[0])
+    if is_array(data, 4) == False:
+        sendString(nick, ERR_NEEDMOREARGS)
+        return
+    if is_channel(data[4]) == False:
+        if is_channel(data[2]) == False:
+            sendString(nick, ERR_NEEDATARGET)
+            return
+        thisChannel = data[2]
+        thisString = " ".join(data[4:])
+    if is_array(data, 5) == False and "thisChannel" not in locals():
+        sendString(nick, ERR_NEEDMOREARGS)
+        return
+    if "thisChannel" not in locals():
+        thisChannel = data[4]
+        thisString = " ".join(data[5:])
+    sendRaw("PRIVMSG {} :{}{}".format(thisChannel, thisString, NEWLINE))
 
 
 # IRC command(s):
@@ -21,45 +60,67 @@ def parse_bot_debug(data):
 def parse_irc_command(command, data):
     IRC_COMMANDS[command](data)
 
-def parse_irc_376(data):
-    # `-> <server> 376 <nick> :End of /MOTD command.
+def parse_raw_376(data):
+    # :<server> 376 <nick> :End of /MOTD command.
 
-    sendRaw("JOIN {}{}".format(BOT_CHAN, NEW_LINES))
+    sendRaw("JOIN {}{}".format(BOT_CHAN, NEWLINE))
 
 def parse_irc_ping(data):
-    # `-> PING [:]<arg>
+    # PING [:]<arg>
 
-    sendRaw("PONG {}{}".format(data.split(" ")[1], NEW_LINES))
+    sendRaw("PONG {}{}".format(data.split(" ")[1], NEWLINE))
 
 def parse_irc_privmsg(data):
-    # `-> <nick!user@host> PRIVMSG <target> :[message]
+    # :<nick!user@host> PRIVMSG <target> :[message]
 
     line = data.split(" ")
-    command = line[3][1:].lower()
-    # command = command.strip(NEW_LINES)
+    nick = getNick(line[0])
+    if is_array(line, 3) == True:
+        # `-> I found out on one IRCd (*cough* mIRCd :P) that if nothing is sent after the <target> (which is actually a bug), the bot will crash.
+        command = line[3][1:].lower()
     if line[2] != BOT_NICK:
         if command[0] != BOT_TRIGGER:
             return
         command = command[1:]
     if command not in BOT_COMMANDS:
         if line[2] == BOT_NICK:
-            sendRaw("{} {} :{}{}".format(BOT_REPLYMETHOD, line[0].split("!")[0][1:], ERR_NOSUCHCOMMAND.format(command), NEW_LINES))
+            sendString(nick, ERR_NOSUCHCOMMAND.format(command))
         return
     parse_bot_command(command, line)
 
-
 # Function(s):
+
+def getNick(fulladdress):
+    # :<nick!user@host>
+
+    return fulladdress.split("!")[0][1:]
+
+def is_array(array, index):
+    try:
+        array[index]
+    except IndexError:
+        return False
+    return True
+
+def is_channel(channel):
+    if channel[0] == "#":
+        return True
+    return False
 
 def sendRaw(data):
     pyBot.send(data.encode("UTF-8"))
-    print(data.strip(NEW_LINES))
+    print(" ".join(re.split(NEWLINE_REGEX, data)))
+
+def sendString(nick, string):
+    sendRaw("{} {} :{}{}".format(BOT_REPLYMETHOD, nick, string, NEWLINE))
 
 
 # define(s):
 
 BOT_CHAN = "#localhost"
 BOT_COMMANDS = {
-    "debug": parse_bot_debug
+    "do": parse_bot_do,
+    "say": parse_bot_say
 }
 BOT_NICK = "pyBot"
 BOT_PORT = 6667
@@ -68,14 +129,20 @@ BOT_REPLYMETHOD = "NOTICE"
 BOT_SERVER = "localhost"
 BOT_TRIGGER = "!"
 
-ERR_NOSUCHCOMMAND = "The command {0} does not exist."
+ERR_NEEDATARGET = "Please specify a channel to use this command."
+ERR_NEEDMOREARGS = "Insufficient parameters."
+ERR_NOSUCHCOMMAND = "The command [{0}] does not exist."
 
 IRC_COMMANDS = {
-    "376": parse_irc_376,
+    "376": parse_raw_376,
     "PING": parse_irc_ping,
     "PRIVMSG": parse_irc_privmsg
 }
-NEW_LINES = "\r\n"
+NEWLINE = "\r\n"
+# `-> Send in this order.
+
+NEWLINE_REGEX = r"[\n\r]+"
+# `-> For splitting.
 
 pyBot = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 pyBot.connect((BOT_SERVER, BOT_PORT))
@@ -84,8 +151,8 @@ pyBot.connect((BOT_SERVER, BOT_PORT))
 # Core:
 
 def main():
-    sendRaw("NICK {}{}".format(BOT_NICK, NEW_LINES))
-    sendRaw("USER {} 0 0 :{}{}".format(BOT_NICK, BOT_REALNAME.format(BOT_NICK), NEW_LINES))
+    sendRaw("NICK {}{}".format(BOT_NICK, NEWLINE))
+    sendRaw("USER {} 0 0 :{}{}".format(BOT_NICK, BOT_REALNAME.format(BOT_NICK), NEWLINE))
 
     while 1:
             data = pyBot.recv(4096).decode("UTF-8")
@@ -93,10 +160,10 @@ def main():
                 break
             print(data)
             # `-> No line stripping in this as I noticed on one server that they have an \r in the MOTD line(s).
-            if len(data.strip(NEW_LINES)) == 0:
+            splitData = re.split(NEWLINE_REGEX, data)
+            if len(splitData) == 1 and splitData[0] == "":
                 return
-            newData = data.split(NEW_LINES)
-            for line in newData:
+            for line in splitData:
                 newLine = line.split(" ")
                 if len(newLine) > 1:
                     if newLine[1] in IRC_COMMANDS:
