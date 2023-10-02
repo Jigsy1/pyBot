@@ -96,7 +96,6 @@ def parse_irc_privmsg(data):
         if dbResult == None:
             if line[2] == BOT_NICK:
                 send_message(nick, ERR_NOSUCHCOMMAND.format(command))
-                return
             dbConnection.close
             return
         dbConnection.close
